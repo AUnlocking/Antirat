@@ -9,25 +9,27 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# ===== INSTALACIÓN DE DEPENDENCIAS =====
-install_deps() {
-    echo -e "${YELLOW}[+] Actualizando paquetes...${NC}"
-    pkg update -y && pkg upgrade -y
+# ===== FUNCIONES =====
+
+show_banner() {
+    clear
+    echo -e "${PURPLE}"
+    echo "       █████╗    ██╗   ██╗"
+    echo "      ██╔══██╗   ██║   ██║"
+    echo "      ███████║   ██║   ██║"
+    echo "      ██╔══██║   ╚██╗ ██╔╝"
+    echo "      ██║  ██║██╗ ╚████╔╝ "
+    echo "      ╚═╝  ╚═╝╚═╝  ╚═══╝  "
     
-    echo -e "${YELLOW}[+] Instalando dependencias principales...${NC}"
-    for pkg in curl jq openssl proot-distro termux-api nmap git; do
-        if ! command -v $pkg >/dev/null 2>&1; then
-            echo -e "${BLUE}[~] Instalando $pkg...${NC}"
-            pkg install -y $pkg || {
-                echo -e "${RED}[-] Error al instalar $pkg.${NC}"
-                exit 1
-            }
-        fi
-    done
-    
-    echo -e "${GREEN}[+] Dependencias instaladas correctamente.${NC}"
+    echo -e "└───────────────────────────────────────┘${NC}"
+    echo -e "${CYAN}┌─[${RED}A-R${CYAN}]─[${YELLOW}Termux${CYAN}]"
+    echo -e "${CYAN}└──╼ ${GREEN}by ${PURPLE}AldazUnlock${NC}"
+    echo -e "${BLUE}------------------------------------------------${NC}"
+    echo ""
 }
 
 # ===== FUNCIONES DE VIRUSTOTAL =====
@@ -146,7 +148,7 @@ scan_android() {
     )
 
     echo -e "${BLUE}[~] Buscando archivos potencialmente maliciosos...${NC}"
-    find "${suspicious_dirs[@]}" -type f \( -iname "*.apk" -o -iname "*.dex" \) \
+    find "${suspicious_dirs[@]}" -type f -iname "*.apk" -o -iname "*.dex" \
         -size -10M -print0 | while IFS= read -r -d $'\0' file; do
         echo -e "${RED}[!] Posible archivo malicioso encontrado:${NC} $file"
         read -p "¿Deseas analizarlo con VirusTotal? (y/N): " choice
@@ -181,26 +183,21 @@ sandbox_mode() {
 
 # ===== MENÚ PRINCIPAL =====
 main_menu() {
-    clear
-    echo -e "${BLUE}
-    ███╗   ███╗ █████╗ ██╗  ██╗ █████╗ ██████╗ ███████╗
-    ████╗ ████║██╔══██╗██║  ██║██╔══██╗██╔══██╗██╔════╝
-    ██╔████╔██║███████║███████║███████║██████╔╝█████╗  
-    ██║╚██╔╝██║██╔══██║██╔══██║██╔══██║██╔══██╗██╔══╝  
-    ██║ ╚═╝ ██║██║  ██║██║  ██║██║  ██║██║  ██║███████╗
-    ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝
-    ${NC}"
-    
+    show_banner  # Muestra el banner
+
+    # Opciones del menú
     echo -e "${GREEN}[1] Analizar URL/Archivo con VirusTotal"
-    echo -e "[2] Escanear dispositivo en busca de malware"
+    echo -e "[2] Escanear dispositivo de malware"
     echo -e "[3] Entorno Sandbox (Debian)"
-    echo -e "[4] Limpieza de seguridad"
+    echo -e "[4] Limpieza de cache"
     echo -e "[5] Salir${NC}"
-    
+
+    # Solicita la opción del usuario
     read -p "Seleccione una opción: " choice
-    
+
     case $choice in
         1)
+            # Submenú para analizar URL o archivo
             echo -e "${GREEN}[1] Analizar URL"
             echo -e "[2] Analizar archivo${NC}"
             read -p "Opción: " vt_choice
@@ -208,39 +205,39 @@ main_menu() {
             case $vt_choice in
                 1) 
                     read -p "Ingrese la URL a analizar: " url
-                    analyze_url "$url"
+                    analyze_url "$url"  # Llama la función para analizar URL
                     ;;
                 2)
                     read -p "Ingrese la ruta del archivo: " file
-                    analyze_file "$file"
+                    analyze_file "$file"  # Llama la función para analizar archivo
                     ;;
                 *) 
-                    echo -e "${RED}[-] Opción inválida.${NC}"
+                    echo -e "${RED}[-] Opción inválida.${NC}"  # Opción incorrecta
                     ;;
             esac
             ;;
         2)
-            scan_android
+            scan_android  # Llama la función para escanear el dispositivo en busca de malware
             ;;
         3)
-            sandbox_mode
+            sandbox_mode  # Llama la función para iniciar el entorno sandbox Debian
             ;;
         4)
-            clean_system
+            clean_system  # Llama la función para limpiar caché y archivos temporales
             ;;
         5)
-            echo -e "${GREEN}[+] Saliendo del programa.${NC}"
+            echo -e "${GREEN}[+] Saliendo del programa.${NC}"  # Opción para salir
             exit 0
             ;;
         *)
-            echo -e "${RED}[-] Opción no válida. Intente nuevamente.${NC}"
+            echo -e "${RED}[-] Opción no válida. Intente nuevamente.${NC}"  # Opción inválida
             ;;
     esac
-    
+
+    # Después de ejecutar una acción, espera y vuelve a mostrar el menú
     read -p "Presione Enter para continuar..."
-    main_menu
+    main_menu  # Vuelve a mostrar el menú
 }
 
 # ===== INICIO DEL PROGRAMA =====
-install_deps
 main_menu
