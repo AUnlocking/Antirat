@@ -187,9 +187,9 @@ main_menu() {
 
     # Opciones del menú
     echo -e "${GREEN}[1] Analizar URL/Archivo con VirusTotal"
-    echo -e "[2] Escanear dispositivo de malware"
+    echo -e "[2] Escanear dispositivo en busca de malware"
     echo -e "[3] Entorno Sandbox (Debian)"
-    echo -e "[4] Limpieza de cache"
+    echo -e "[4] Limpieza de seguridad"
     echo -e "[5] Salir${NC}"
 
     # Solicita la opción del usuario
