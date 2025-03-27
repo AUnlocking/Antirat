@@ -2,7 +2,7 @@
 
 ```bash
 # Instalación rápida (copia y pega en Termux)
-curl -sL https://raw.githubusercontent.com/AldazUnlock/antirat/main/antirat.sh -o antirat.sh && chmod +x antirat.sh && ./antirat.sh
+git clone https://github.com/AUnlocking/Antirat.git && chmod +x antirat.sh && ./antirat.sh
 ```
 
 ## 📌 Características Principales
@@ -46,12 +46,12 @@ cat malware_analyzer.log
 ## 🌐 Soporte y Actualizaciones
 ```bash
 # Actualizar script
-curl -sL https://raw.githubusercontent.com/AldazUnlock/antirat/main/antirat.sh -o antirat.sh && chmod +x antirat.sh
+git clone https://github.com/AUnlocking/Antirat.git
 ```
 
 📌 **Nota**: La API gratuita de VirusTotal permite 4 análisis por minuto.
 
-✉️ **Contacto**: [@AldazUnlock en GitHub](https://github.com/AldazUnlock)
+✉️ **Contacto**: [@AldazUnlock en GitHub](https://wa.me/message/TOJNCVY7RLSYJ1)
 
 ---
 
