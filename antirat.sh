@@ -53,71 +53,26 @@ validate_api_key() {
     }
 }
 
-analyze_url() {
-    [ -z "$API_KEY" ] && {
-        echo -e "${YELLOW}[?] Ingrese su API Key de VirusTotal:${NC}"
-        read -s API_KEY
-        validate_api_key || return
-    }
-
-    read -p "Ingrese la URL a analizar: " url
-    [[ "$url" =~ ^https?:// ]] || {
-        echo -e "${RED}[-] URL inválida. Use http:// o https://${NC}"
-        return
-    }
-
-    echo -e "${YELLOW}[~] Analizando URL...${NC}"
-    response=$(curl -s --max-time 30 -H "x-apikey: $API_KEY" -F "url=$url" "https://www.virustotal.com/api/v3/urls")
-    
-    analysis_id=$(echo "$response" | jq -r '.data.id')
-    [ -z "$analysis_id" ] && {
-        error=$(echo "$response" | jq -r '.error.message')
-        echo -e "${RED}[-] Error: ${error:-"Falló la conexión"}${NC}"
-        return
-    }
-
-    echo -e "${BLUE}[~] ID de análisis: $analysis_id${NC}"
-    while true; do
-        report=$(curl -s --max-time 30 -H "x-apikey: $API_KEY" "https://www.virustotal.com/api/v3/analyses/$analysis_id")
-        status=$(echo "$report" | jq -r '.data.attributes.status')
-        
-        case "$status" in
-            "completed")
-                echo -e "${GREEN}[+] Resultados:${NC}"
-                echo "Maliciosos: $(echo "$report" | jq -r '.data.attributes.stats.malicious')"
-                echo "Inofensivos: $(echo "$report" | jq -r '.data.attributes.stats.undetected')"
-                echo "Enlace: https://www.virustotal.com/gui/url/$analysis_id"
-                break
-                ;;
-            "queued")
-                sleep 10
-                ;;
-            *)
-                echo -e "${RED}[-] Error en el análisis.${NC}"
-                break
-                ;;
-        esac
-    done
-}
-
-# ===== FUNCIÓN scan_android COMPLETA =====
 scan_android() {
     show_banner
     echo -e "${YELLOW}[ ESCANEO ANDROID ]${NC}"
     echo ""
-    
+
     # Verificar permisos de almacenamiento
-    if [ ! -r /sdcard ]; then
-        echo -e "${RED}[-] Error: Termux no tiene permisos de almacenamiento${NC}"
-        echo -e "${YELLOW}[?] Ejecuta este comando y concede permisos:"
-        echo -e "termux-setup-storage${NC}"
-        echo ""
-        read -p "Presiona Enter después de conceder los permisos..."
-        [ ! -r /sdcard ] && {
-            echo -e "${RED}[-] Permisos no concedidos. Volviendo al menú...${NC}"
+    if [ ! -r /sdcard ] || [ ! -w /sdcard ]; then
+        echo -e "${RED}[-] Error: Termux no tiene permisos de almacenamiento.${NC}"
+        echo -e "${YELLOW}[?] Solicitando permisos...${NC}"
+        
+        termux-setup-storage
+        sleep 3  
+
+        if [ ! -r /sdcard ] || [ ! -w /sdcard ]; then
+            echo -e "${RED}[-] No se concedieron los permisos. Saliendo...${NC}"
             sleep 2
             return
-        }
+        else
+            echo -e "${GREEN}[+] Permisos concedidos correctamente.${NC}"
+        fi
     fi
 
     echo -e "${GREEN}[1] Escanear directorios comunes (rápido)"
@@ -126,22 +81,20 @@ scan_android() {
     echo -e "[4] Analizar archivo con VirusTotal"
     echo -e "[5] Volver al menú principal${NC}"
     echo ""
-    
+
     read -p "Seleccione una opción: " scan_choice
-    
+
     case $scan_choice in
         1)
-            echo -e "${YELLOW}[~] Escaneando directorios comunes...${NC}"
             targets=("/sdcard/Download" "/sdcard/DCIM" "/sdcard/Android/media")
-            suspicious_files=$(find "${targets[@]}" -type f \( -name "*.apk" -o -name "*.exe" -o -name "*.bat" -o -name "*.jar" \) -exec ls -lh {} + 2>/dev/null)
+            suspicious_files=$(find "${targets[@]}" -type f -name "*.apk" -o -name "*.exe" -o -name "*.bat" -o -name "*.jar" 2>/dev/null)
             ;;
         2)
-            echo -e "${YELLOW}[~] Escaneando todo el almacenamiento... (Paciencia)${NC}"
-            suspicious_files=$(find /sdcard -type f \( -name "*.apk" -o -name "*.exe" -o -name "*.bat" -o -name "*.jar" \) -exec ls -lh {} + 2>/dev/null)
+            suspicious_files=$(find /sdcard -type f -name "*.apk" -o -name "*.exe" -o -name "*.bat" -o -name "*.jar" 2>/dev/null)
             ;;
         3)
             read -p "Ingrese nombre/patrón de archivo (ej: *hack*): " pattern
-            suspicious_files=$(find /sdcard -type f -name "$pattern" -exec ls -lh {} + 2>/dev/null)
+            suspicious_files=$(find /sdcard -type f -name "$pattern" 2>/dev/null)
             ;;
         4)
             analyze_file_with_virustotal
@@ -155,87 +108,21 @@ scan_android() {
             return
             ;;
     esac
-    
+
     if [ -z "$suspicious_files" ]; then
         echo -e "${GREEN}[+] No se encontraron archivos sospechosos.${NC}"
     else
         echo -e "${RED}[!] Archivos sospechosos encontrados:${NC}"
         echo "$suspicious_files"
         echo ""
-        
+
         read -p "¿Desea analizar algún archivo con VirusTotal? (s/n): " analyze_choice
         if [[ "$analyze_choice" =~ [sSyY] ]]; then
             analyze_file_with_virustotal
         fi
     fi
-    
+
     read -p "Presione Enter para continuar..."
-}
-
-analyze_file_with_virustotal() {
-    [ -z "$API_KEY" ] && {
-        echo -e "${YELLOW}[?] Ingrese su API Key de VirusTotal:${NC}"
-        read -s API_KEY
-        validate_api_key || return
-    }
-
-    read -p "Ingrese la ruta completa del archivo: " file_path
-    [ -f "$file_path" ] || {
-        echo -e "${RED}[-] Archivo no encontrado.${NC}"
-        return
-    }
-
-    file_size=$(stat -c %s "$file_path")
-    if [ "$file_size" -gt 650000000 ]; then
-        echo -e "${RED}[-] El archivo es demasiado grande (máximo 650MB).${NC}"
-        return
-    fi
-
-    echo -e "${YELLOW}[~] Subiendo archivo a VirusTotal...${NC}"
-    response=$(curl -s --max-time 120 -H "x-apikey: $API_KEY" --form "file=@$file_path" "https://www.virustotal.com/api/v3/files")
-    
-    analysis_id=$(echo "$response" | jq -r '.data.id')
-    [ -z "$analysis_id" ] && {
-        error=$(echo "$response" | jq -r '.error.message')
-        echo -e "${RED}[-] Error: ${error:-"Falló la conexión"}${NC}"
-        return
-    }
-
-    echo -e "${BLUE}[~] ID de análisis: $analysis_id${NC}"
-    echo -e "${YELLOW}[~] Esperando resultados (esto puede tomar unos minutos)...${NC}"
-    
-    while true; do
-        report=$(curl -s --max-time 30 -H "x-apikey: $API_KEY" "https://www.virustotal.com/api/v3/analyses/$analysis_id")
-        status=$(echo "$report" | jq -r '.data.attributes.status')
-        
-        case "$status" in
-            "completed")
-                echo -e "${GREEN}[+] Resultados:${NC}"
-                malicious=$(echo "$report" | jq -r '.data.attributes.stats.malicious')
-                undetected=$(echo "$report" | jq -r '.data.attributes.stats.undetected')
-                
-                if [ "$malicious" -gt 0 ]; then
-                    echo -e "${RED}[!] ARCHIVO MALICIOSO DETECTADO${NC}"
-                else
-                    echo -e "${GREEN}[+] Archivo limpio${NC}"
-                fi
-                
-                echo "Motores que lo detectaron: $malicious"
-                echo "Motores que no detectaron: $undetected"
-                sha256=$(echo "$report" | jq -r '.meta.file_info.sha256')
-                echo "Enlace: https://www.virustotal.com/gui/file/$sha256"
-                break
-                ;;
-            "queued")
-                echo -n "."
-                sleep 15
-                ;;
-            *)
-                echo -e "${RED}[-] Error en el análisis.${NC}"
-                break
-                ;;
-        esac
-    done
 }
 
 clean_system() {
@@ -252,69 +139,30 @@ clean_system() {
     read -p "Seleccione una opción: " clean_choice
     
     case $clean_choice in
-        1)
-            echo -e "${YELLOW}[~] Limpiando caché...${NC}"
-            rm -rf ~/.cache/*
-            echo -e "${GREEN}[+] Caché limpiado.${NC}"
-            ;;
-        2)
-            echo -e "${YELLOW}[~] Eliminando temporales...${NC}"
-            find /sdcard -type f \( -name "*.tmp" -o -name "*.temp" \) -delete 2>/dev/null
-            echo -e "${GREEN}[+] Archivos temporales eliminados.${NC}"
-            ;;
-        3)
-            echo -e "${YELLOW}[~] Limpiando registros...${NC}"
-            rm -f ~/.bash_history
-            echo -e "${GREEN}[+] Registros limpiados.${NC}"
-            ;;
-        4)
-            return
-            ;;
-        *)
-            echo -e "${RED}[-] Opción inválida${NC}"
-            ;;
+        1) rm -rf ~/.cache/* ;;
+        2) find /sdcard -type f -name "*.tmp" -o -name "*.temp" -delete 2>/dev/null ;;
+        3) rm -f ~/.bash_history ;;
+        4) return ;;
+        *) echo -e "${RED}[-] Opción inválida${NC}" ;;
     esac
     
     read -p "Presione Enter para continuar..."
 }
 
-show_tutorial() {
-    show_banner
-    echo -e "${YELLOW}[ TUTORIAL ]${NC}"
-    echo ""
-    echo "1. Para analizar URLs/archivos necesitarás:"
-    echo "   - Una API key gratuita de VirusTotal"
-    echo "   - Obtén una en: https://www.virustotal.com/gui/my-apikey"
-    echo ""
-    echo "2. Escaneo Android:"
-    echo "   - Busca APKs y archivos ejecutables sospechosos"
-    echo "   - Puedes analizarlos con VirusTotal"
-    echo ""
-    echo "3. Limpieza de seguridad:"
-    echo "   - Elimina archivos temporales y caché"
-    echo ""
-    echo -e "${GREEN}Presiona Enter para volver al menú...${NC}"
-    read
-}
-
 main_menu() {
     while true; do
         show_banner
-        echo -e "${GREEN}[1] Analizar URL con VirusTotal"
-        echo -e "[2] Escanear dispositivo"
-        echo -e "[3] Limpieza de seguridad"
-        echo -e "[4] Tutorial"
-        echo -e "[5] Salir${NC}"
+        echo -e "${GREEN}[1] Escanear dispositivo"
+        echo -e "[2] Limpieza de seguridad"
+        echo -e "[3] Salir${NC}"
         echo ""
         
         read -p "Seleccione una opción: " choice
         
         case $choice in
-            1) analyze_url ;;
-            2) scan_android ;;
-            3) clean_system ;;
-            4) show_tutorial ;;
-            5) exit 0 ;;
+            1) scan_android ;;
+            2) clean_system ;;
+            3) exit 0 ;;
             *) echo -e "${RED}[-] Opción inválida${NC}" ;;
         esac
     done
