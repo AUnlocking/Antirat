@@ -37,3 +37,6 @@ cd Antirat
 
 # 4. Dar permisos de ejecución
 chmod +x NetHack.sh
+ #5. Ejecutar
+
+./NetHack.sh
