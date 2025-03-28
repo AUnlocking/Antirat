@@ -1,6 +1,6 @@
+
 #!/data/data/com.termux/files/usr/bin/bash
 
-# ===== CONFIGURACIÓN INICIAL =====
 exec > >(tee -a malware_analyzer.log) 2>&1
 export LANG=en_US.UTF-8
 
@@ -13,8 +13,6 @@ PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# ===== FUNCIONES =====
-
 show_banner() {
     clear
     echo -e "${PURPLE}"
@@ -24,7 +22,6 @@ show_banner() {
     echo "      ██╔══██║   ╚██╗ ██╔╝"
     echo "      ██║  ██║██╗ ╚████╔╝ "
     echo "      ╚═╝  ╚═╝╚═╝  ╚═══╝  "
-    
     echo -e "└───────────────────────────────────────┘${NC}"
     echo -e "${CYAN}┌─[${RED}A-R${CYAN}]─[${YELLOW}Termux${CYAN}]"
     echo -e "${CYAN}└──╼ ${GREEN}by ${PURPLE}AldazUnlock${NC}"
@@ -32,212 +29,205 @@ show_banner() {
     echo ""
 }
 
-# ===== FUNCIONES DE VIRUSTOTAL =====
-validate_api_key() {
-    [[ "$API_KEY" =~ ^[a-zA-Z0-9]{64}$ ]] || {
-        echo -e "${RED}[-] API Key inválida. Debe tener 64 caracteres alfanuméricos.${NC}"
-        return 1
-    }
-}
 
-get_virustotal_api() {
-    echo -e "${YELLOW}[?] Ingrese su API Key de VirusTotal:${NC}"
-    read -s API_KEY
-    validate_api_key || {
-        echo -e "${RED}[-] API Key incorrecta. Vuelva a intentarlo.${NC}"
-        return 1
-    }
-}
-
-analyze_url() {
-    [ -z "$API_KEY" ] && get_virustotal_api || return
-
-    local url=$1
-    [[ "$url" =~ ^https?:// ]] || {
-        echo -e "${RED}[-] Formato de URL inválido. Use http:// o https://${NC}"
-        return
-    }
-
-    echo -e "${YELLOW}[~] Analizando URL: $url${NC}"
-    local response=$(curl -s --max-time 30 \
-        -H "x-apikey: $API_KEY" \
-        -F "url=$url" "https://www.virustotal.com/api/v3/urls")
-
-    local error=$(echo "$response" | jq -r '.error.message // ""')
-    if [ -n "$error" ]; then
-        echo -e "${RED}[-] Error de API: $error${NC}"
-        return
-    fi
-
-    local analysis_id=$(echo "$response" | jq -r '.data.id')
-    echo -e "${BLUE}[~] ID de análisis: $analysis_id${NC}"
-    echo -e "${YELLOW}[~] Esperando resultados... (Puede tardar unos minutos)${NC}"
-
-    while true; do
-        local report=$(curl -s --max-time 30 \
-            -H "x-apikey: $API_KEY" \
-            "https://www.virustotal.com/api/v3/analyses/$analysis_id")
-
-        case $(echo "$report" | jq -r '.data.attributes.status') in
-            "completed")
-                echo -e "${GREEN}[+] Resultados para ${BLUE}$url${GREEN}:${NC}"
-                echo "🔴 Maliciosos: $(echo "$report" | jq -r '.data.attributes.stats.malicious')"
-                echo "🟢 Inofensivos: $(echo "$report" | jq -r '.data.attributes.stats.undetected')"
-                echo "🔵 Enlace: https://www.virustotal.com/gui/url/$analysis_id"
-                break
-                ;;
-            "queued")
-                sleep 10
-                ;;
-            *)
-                echo -e "${RED}[-] Error en el análisis.${NC}"
-                return
-                ;;
-        esac
-    done
-}
-
-analyze_file() {
-    [ -z "$API_KEY" ] && get_virustotal_api || return
-
-    local file=$1
-    [ ! -f "$file" ] && {
-        echo -e "${RED}[-] Archivo no encontrado.${NC}"
-        return
-    }
-
-    local filesize=$(stat -c %s "$file")
-    [ "$filesize" -gt 33554432 ] && {
-        echo -e "${RED}[-] El archivo excede 32MB (límite de VirusTotal).${NC}"
-        return
-    }
-
-    echo -e "${YELLOW}[~] Codificando archivo (base64)...${NC}"
-    local file_data=$(base64 -w 0 "$file") || {
-        echo -e "${RED}[-] Error al codificar el archivo.${NC}"
-        return
-    }
-
-    echo -e "${YELLOW}[~] Subiendo a VirusTotal...${NC}"
-    local response=$(curl -s --max-time 60 \
-        -H "x-apikey: $API_KEY" \
-        -F "file=$file_data" "https://www.virustotal.com/api/v3/files")
-
-    local error=$(echo "$response" | jq -r '.error.message // ""')
-    [ -n "$error" ] && {
-        echo -e "${RED}[-] Error de API: $error${NC}"
-        return
-    }
-
-    local analysis_id=$(echo "$response" | jq -r '.data.id')
-    echo -e "${GREEN}[+] Análisis iniciado correctamente.${NC}"
-    echo -e "${BLUE}[~] ID de análisis: $analysis_id${NC}"
-    echo -e "${YELLOW}[+] Puedes verificar los resultados más tarde con:${NC}"
-    echo "curl -s -H 'x-apikey: $API_KEY' 'https://www.virustotal.com/api/v3/analyses/$analysis_id' | jq"
-}
-
-# ===== FUNCIONES SIN API KEY =====
-scan_android() {
-    echo -e "${YELLOW}[+] Iniciando escaneo de malware en Android...${NC}"
-    
-    declare -a suspicious_dirs=(
-        "/sdcard/Download"
-        "/sdcard/Android/data"
-        "$HOME"
-        "/data/app"
-    )
-
-    echo -e "${BLUE}[~] Buscando archivos potencialmente maliciosos...${NC}"
-    find "${suspicious_dirs[@]}" -type f -iname "*.apk" -o -iname "*.dex" \
-        -size -10M -print0 | while IFS= read -r -d $'\0' file; do
-        echo -e "${RED}[!] Posible archivo malicioso encontrado:${NC} $file"
-        read -p "¿Deseas analizarlo con VirusTotal? (y/N): " choice
-        if [[ "$choice" =~ [yY] ]]; then
-            analyze_file "$file"
+# Función para instalar dependencias
+install_deps() {
+    echo "Verificando dependencias..."
+    missing=0
+    for pkg in curl jq base64 openssl; do
+        if ! command -v $pkg >/dev/null 2>&1; then
+            echo "Instalando $pkg..."
+            pkg install -y $pkg || { echo "Fallo al instalar $pkg. Saliendo."; exit 1; }
+            missing=1
         fi
     done
-
-    echo -e "${GREEN}[+] Escaneo completado.${NC}"
-}
-
-clean_system() {
-    echo -e "${YELLOW}[+] Limpiando caché y archivos temporales...${NC}"
-    rm -rf ~/.cache/* ~/tmp/*
-    [ -d ~/.termux/share/cookies ] && rm -rf ~/.termux/share/cookies
-    echo -e "${GREEN}[+] Limpieza completada.${NC}"
-}
-
-sandbox_mode() {
-    echo -e "${YELLOW}[+] Iniciando entorno sandbox Debian...${NC}"
-    if ! command -v proot-distro >/dev/null; then
-        pkg install proot-distro -y
+    if [ $missing -eq 1 ]; then
+        echo "Dependencias instaladas exitosamente."
+    else
+        echo "Todas las dependencias ya están instaladas."
     fi
-    
-    if ! proot-distro list | grep -q "debian"; then
+}
+
+# Función para analizar una URL
+analyze_url() {
+    local url=$1
+    if [[ ! $url =~ ^https?://.* ]]; then
+        echo "Formato de URL inválido."
+        return
+    fi
+    local response=$(curl -s "https://www.virustotal.com/api/v3/urls" \
+        -H "x-apikey:$API_KEY" \
+        -F "url=$url")
+    local status=$(echo $response | jq -r '.error.message // ""')
+    if [ "$status" != "" ]; then
+        echo "Error: $status"
+        return
+    fi
+    local analysis_id=$(echo $response | jq -r '.data.id')
+    echo "Esperando análisis..."
+    while true; do
+        local report=$(curl -s "https://www.virustotal.com/api/v3/analyses/$analysis_id" \
+            -H "x-apikey:$API_KEY")
+        local status=$(echo $report | jq -r '.data.attributes.status')
+        if [ "$status" == "completed" ]; then
+            break
+        fi
+        sleep 5
+    done
+    echo "Análisis para URL: $url"
+    echo "Malicioso: $(echo $report | jq -r '.data.attributes.stats.malicious')"
+    echo "No detectado: $(echo $report | jq -r '.data.attributes.stats.undetected')"
+}
+
+# Función para analizar un archivo
+analyze_file() {
+    local file=$1
+    if [ ! -f "$file" ]; then
+        echo "Archivo no encontrado."
+        return
+    fi
+    local file_data=$(base64 $file)
+    local response=$(curl -s "https://www.virustotal.com/api/v3/files" \
+        -H "x-apikey:$API_KEY" \
+        -F "file=$file_data")
+    local status=$(echo $response | jq -r '.error.message // ""')
+    if [ "$status" != "" ]; then
+        echo "Error: $status"
+        return
+    fi
+    local analysis_id=$(echo $response | jq -r '.data.id')
+    echo "Esperando análisis..."
+    while true; do
+        local report=$(curl -s "https://www.virustotal.com/api/v3/analyses/$analysis_id" \
+            -H "x-apikey:$API_KEY")
+        local status=$(echo $report | jq -r '.data.attributes.status')
+        if [ "$status" == "completed" ]; then
+            break
+        fi
+        sleep 5
+    done
+    echo "Análisis para archivo: $file"
+    echo "Malicioso: $(echo $report | jq -r '.data.attributes.stats.malicious')"
+    echo "No detectado: $(echo $report | jq -r '.data.attributes.stats.undetected')"
+}
+
+# Función para manejar la seguridad de sesiones y cookies
+handle_session_security() {
+    show_banner
+    echo "Opciones de seguridad de sesiones y cookies:"
+    echo "1. Borrar cookies"
+    echo "2. Usar modo incógnito"
+    echo "3. Volver al menú principal"
+    read -p "Seleccione una opción: " choice
+    case $choice in
+        1)
+            if [ -d ~/.termux/share/cookies ]; then
+                rm -rf ~/.termux/share/cookies
+                echo "Cookies borradas."
+            else
+                echo "Directorio de cookies no encontrado."
+            fi
+            sleep 2
+            ;;
+        2)
+            echo "Abriendo navegador en modo incógnito..."
+            termux-open-url --incognito "https://www.google.com"
+            sleep 2
+            ;;
+        3)
+            return
+            ;;
+        *)
+            echo "Opción inválida."
+            sleep 1
+            ;;
+    esac
+    handle_session_security
+}
+
+# Función para crear un entorno sandbox
+create_sandbox() {
+    if ! command -v proot-distro >/dev/null 2>&1; then
+        echo "proot-distro no encontrado. Instalando..."
+        pkg install -y proot-distro
+    fi
+    if proot-distro list | grep -q "debian"; then
+        echo "Entorno Debian ya existe."
+    else
+        echo "Creando entorno Debian..."
         proot-distro install debian
     fi
-    
-    echo -e "${GREEN}[+] Entorno sandbox listo. Ejecuta comandos en Debian:${NC}"
+    echo "Ingresando al entorno Debian..."
     proot-distro login debian
 }
 
-# ===== MENÚ PRINCIPAL =====
-main_menu() {
-    show_banner  # Muestra el banner
+# Función para solicitar API Key de VirusTotal
+get_virustotal_api() {
+    read -p "Ingresa tu clave API de VirusTotal: " API_KEY
+    echo
+}
 
-    # Opciones del menú
-    echo -e "${GREEN}[1] Analizar URL/Archivo con VirusTotal"
-    echo -e "[2] Escanear dispositivo en busca de malware"
-    echo -e "[3] Entorno Sandbox (Debian)"
-    echo -e "[4] Limpieza de seguridad"
-    echo -e "[5] Salir${NC}"
+# Script principal
+install_deps
 
-    # Solicita la opción del usuario
-    read -p "Seleccione una opción: " choice
+while true; do
+    show_banner
+    read -p "Selecciona una opción [1-3]: " choice
 
     case $choice in
         1)
-            # Submenú para analizar URL o archivo
-            echo -e "${GREEN}[1] Analizar URL"
-            echo -e "[2] Analizar archivo${NC}"
-            read -p "Opción: " vt_choice
-            
+            get_virustotal_api
+            echo "1. Analizar URL"
+            echo "2. Analizar archivo"
+            echo "3. Volver al menú principal"
+            read -p "Seleccione una opción: " vt_choice
             case $vt_choice in
-                1) 
-                    read -p "Ingrese la URL a analizar: " url
-                    analyze_url "$url"  # Llama la función para analizar URL
+                1)
+                    read -p "Ingresa la URL a analizar: " url
+                    analyze_url "$url"
                     ;;
                 2)
-                    read -p "Ingrese la ruta del archivo: " file
-                    analyze_file "$file"  # Llama la función para analizar archivo
+                    read -p "Ingresa la ruta del archivo a analizar: " file
+                    analyze_file "$file"
                     ;;
-                *) 
-                    echo -e "${RED}[-] Opción inválida.${NC}"  # Opción incorrecta
+                3)
+                    continue
+                    ;;
+                *)
+                    echo "Opción inválida."
+                    ;;
+            esac
+            read -p "Presiona Enter para continuar..."
+            ;;
+        2)
+            echo "1. Manejar seguridad de sesiones y cookies"
+            echo "2. Crear entorno sandbox"
+            echo "3. Volver al menú principal"
+            read -p "Seleccione una opción: " toolkit_choice
+            case $toolkit_choice in
+                1)
+                    handle_session_security
+                    ;;
+                2)
+                    create_sandbox
+                    read -p "Presiona Enter para continuar..."
+                    ;;
+                3)
+                    continue
+                    ;;
+                *)
+                    echo "Opción inválida."
+                    sleep 1
                     ;;
             esac
             ;;
-        2)
-            scan_android  # Llama la función para escanear el dispositivo en busca de malware
-            ;;
         3)
-            sandbox_mode  # Llama la función para iniciar el entorno sandbox Debian
-            ;;
-        4)
-            clean_system  # Llama la función para limpiar caché y archivos temporales
-            ;;
-        5)
-            echo -e "${GREEN}[+] Saliendo del programa.${NC}"  # Opción para salir
-            exit 0
+            echo "Saliendo..."
+            break
             ;;
         *)
-            echo -e "${RED}[-] Opción no válida. Intente nuevamente.${NC}"  # Opción inválida
+            echo "Opción inválida. Por favor, selecciona nuevamente."
+            sleep 1
             ;;
     esac
-
-    # Después de ejecutar una acción, espera y vuelve a mostrar el menú
-    read -p "Presione Enter para continuar..."
-    main_menu  # Vuelve a mostrar el menú
-}
-
-# ===== INICIO DEL PROGRAMA =====
-main_menu
+done
