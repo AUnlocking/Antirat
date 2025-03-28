@@ -1,61 +1,39 @@
-# 🔍 ANTI-RAT Tool for Termux
+# Termux Security Toolkit (TST) 🔐
+
+![Banner](https://via.placeholder.com/800x200?text=Termux+Security+Toolkit+-+NetHack.sh+by+AldazUnlock)
+
+Herramienta todo-en-uno para análisis de seguridad en Termux con capacidades de análisis de malware, auditoría WiFi y protección de privacidad.
+
+## 🌟 Características
+
+### 🦠 Análisis de Malware
+- Escaneo de URLs/archivos con **VirusTotal API**
+- Detección de motores maliciosos
+- Informes detallados en formato JSON
+
+### 📶 Herramientas WiFi
+- Escaneo de redes cercanas
+- Extracción de **Handshake WPA/WPA2**
+- Modo monitor e inyección de paquetes
+- Generación de redes ficticias
+
+### 🕵️ Kit de Privacidad
+- Gestión avanzada de **cookies/sesiones**
+- Entorno **sandbox** con Debian (proot-distro)
+- Verificación de conexiones activas
+
+## 🚀 Instalación en Termux
 
 ```bash
-# Instalación rápida (copia y pega en Termux)
-git clone https://github.com/AUnlocking/Antirat.git && chmod +x antirat.sh && ./antirat.sh
-```
-
-## 📌 Características Principales
-- ✅ Escaneo de URLs/archivos con VirusTotal
-- ✅ Detección de malware en Android
-- ✅ Herramientas de limpieza de seguridad
-- ✅ Interfaz intuitiva con menú interactivo
-
-## 🔧 Requisitos Automáticos
-El script instalará todo lo necesario:
-```bash
-pkg install -y curl jq openssl termux-api nmap git
-```
-
-## 🚀 Uso Básico
-1. Obtén API Key gratuita de VirusTotal:
-```bash
-xdg-open https://www.virustotal.com/gui/my-apikey
-```
-
-2. Ejecuta el analizador:
-```bash
-./antirat.sh
-```
-
-## 📋 Opciones del Menú
-```text
-[1] Analizar URL 📡
-[2] Escanear dispositivo 📱 
-[3] Limpieza de seguridad 🧹
-[4] Tutorial ❓
-[5] Salir 🚪
-```
-
-## 📊 Estadísticas de Análisis
-```bash
-# Ver registros de análisis
-cat malware_analyzer.log
-```
-
-## 🌐 Soporte y Actualizaciones
-```bash
-# Actualizar script
-git clone https://github.com/AUnlocking/Antirat.git
-```
-
-📌 **Nota**: La API gratuita de VirusTotal permite 4 análisis por minuto.
-
-✉️ **Contacto**: [@AldazUnlock en GitHub](https://wa.me/message/TOJNCVY7RLSYJ1)
-
----
-
-💡 **Tip**: Mantén Termux actualizado para mejor rendimiento:
-```bash
+# 1. Actualizar paquetes
 pkg update && pkg upgrade -y
-```
+
+# 2. Instalar dependencias
+pkg install -y git bash curl jq openssl proot-distro tmux
+
+# 3. Clonar repositorio
+git clone https://github.com/AUnlocking/Antirat.git
+cd Antirat
+
+# 4. Dar permisos de ejecución
+chmod +x NetHack.sh
